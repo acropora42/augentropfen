@@ -70,17 +70,27 @@
   .zeile.dex { --farbe: var(--dex); }
   .zeile.yel { --farbe: var(--yel); }
 
-  button.tropfen {
+  .tropfen {
     font: inherit; border: 2px solid var(--linie); background: #fff; color: var(--text);
-    border-radius: 12px; min-height: 58px; padding: 6px; cursor: pointer;
+    border-radius: 12px; min-height: 58px; padding: 6px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  button.tropfen .auge { font-weight: 600; }
-  button.tropfen .info { font-size: 12px; color: var(--grau); }
+  button.tropfen { cursor: pointer; }
   button.tropfen:active { transform: scale(.97); }
-  button.tropfen.erledigt { background: var(--fertig); border-color: var(--fertig); color: #fff; }
-  button.tropfen.erledigt .info { color: #fff; opacity: .9; }
-  button.tropfen:disabled { background: var(--bg); color: var(--grau); border-style: dashed; cursor: default; }
+  .tropfen .auge { font-weight: 600; }
+  .tropfen .info { font-size: 12px; color: var(--grau); }
+  .tropfen.erledigt { background: var(--fertig); border-color: var(--fertig); color: #fff; }
+  .tropfen.erledigt .info { color: #fff; opacity: .9; }
+  .tropfen:disabled, .tropfen.inaktiv { background: var(--bg); color: var(--grau); border-style: dashed; cursor: default; }
+  .tropfen.fehlt { background: #FDF2F2; border-color: #F2C4C4; }
+  .tropfen.fehlt .info { color: #A42A2A; }
+
+  .tabs { display: flex; background: var(--linie); border-radius: 12px; padding: 4px; margin-top: 12px; }
+  .tabs button {
+    flex: 1; font: inherit; font-weight: 600; border: 0; background: transparent; color: var(--grau);
+    padding: 9px; border-radius: 9px; cursor: pointer;
+  }
+  .tabs button.aktiv { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
   footer { margin-top: 18px; font-size: 12px; color: var(--grau); text-align: center; }
 </style>
@@ -91,6 +101,11 @@
     <h1>Augentropfen</h1>
     <div class="datum" id="datum"></div>
   </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-ansicht="heute" class="aktiv">Heute</button>
+    <button data-ansicht="gestern">Gestern</button>
+  </nav>
 
   <div class="fortschritt"><div id="balken" style="width:0"></div></div>
   <div class="zaehler" id="zaehler"></div>
@@ -104,7 +119,7 @@
 
   <div id="slots"></div>
 
-  <footer>Antippen = getropft · nochmal antippen = rückgängig</footer>
+  <footer id="fuss"></footer>
 </main>
 
 <script>
@@ -146,14 +161,25 @@
     return m ? `${h} Std ${m} Min` : `${h} Std`;
   }
 
+  // 'heute' = abhaken, 'gestern' = nur ansehen (kein Nachtragen)
+  let ansicht = 'heute';
+
   function render() {
     const jetzt = new Date();
-    const tag = tagKey(jetzt);
+    const gestern = ansicht === 'gestern';
+    const tagDatum = new Date(jetzt);
+    if (gestern) tagDatum.setDate(tagDatum.getDate() - 1);
+    const tag = tagKey(tagDatum);
     const daten = laden(tag);
     const minJetzt = jetzt.getHours() * 60 + jetzt.getMinutes();
 
-    document.getElementById('datum').textContent =
-      'Heute, ' + jetzt.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    document.getElementById('datum').textContent = (gestern ? 'Gestern, ' : 'Heute, ') +
+      tagDatum.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    document.querySelectorAll('#tabs button').forEach(b =>
+      b.classList.toggle('aktiv', b.dataset.ansicht === ansicht));
+    document.getElementById('fuss').textContent = gestern
+      ? 'Nur zum Nachsehen · nachtragen geht nicht'
+      : 'Antippen = getropft · nochmal antippen = rückgängig';
 
     let gesamt = 0, erledigt = 0, naechster = null;
 
@@ -165,22 +191,29 @@
         const knoepfe = AUGEN.map(a => {
           const id = `${slot.zeit}|${mi}|${a.id}`;
           if (!aktiv(a.id, tag)) {
-            return `<button class="tropfen" disabled><span class="auge">${a.name}</span><span class="info">ab morgen</span></button>`;
+            return gestern
+              ? `<div class="tropfen inaktiv"><span class="auge">${a.name}</span><span class="info">–</span></div>`
+              : `<button class="tropfen" disabled><span class="auge">${a.name}</span><span class="info">ab morgen</span></button>`;
           }
           gesamt++;
           const um = daten[id];
           if (um) {
             erledigt++;
-            return `<button class="tropfen erledigt" data-id="${id}"><span class="auge">✓ ${a.name}</span><span class="info">um ${um}</span></button>`;
+            return gestern
+              ? `<div class="tropfen erledigt"><span class="auge">✓ ${a.name}</span><span class="info">um ${um}</span></div>`
+              : `<button class="tropfen erledigt" data-id="${id}"><span class="auge">✓ ${a.name}</span><span class="info">um ${um}</span></button>`;
           }
           offen++;
-          return `<button class="tropfen" data-id="${id}"><span class="auge">${a.name}</span><span class="info">offen</span></button>`;
+          return gestern
+            ? `<div class="tropfen fehlt"><span class="auge">${a.name}</span><span class="info">nicht abgehakt</span></div>`
+            : `<button class="tropfen" data-id="${id}"><span class="auge">${a.name}</span><span class="info">offen</span></button>`;
         }).join('');
         return `<div class="zeile ${mi}"><div class="mittel">${MITTEL[mi]}</div>${knoepfe}</div>`;
       }).join('');
 
       let klasse, status;
       if (offen === 0) { klasse = 'fertig'; status = 'erledigt'; }
+      else if (gestern) { klasse = 'spaet'; status = 'fehlt'; }
       else if (minJetzt < minSlot) { klasse = ''; status = 'in ' + dauerText(minSlot - minJetzt); }
       else if (minJetzt - minSlot > SPAET_NACH_MIN) { klasse = 'spaet'; status = 'überfällig'; }
       else { klasse = 'faellig'; status = 'jetzt fällig'; }
@@ -198,7 +231,12 @@
     document.getElementById('zaehler').textContent = `${erledigt} von ${gesamt} Tropfen erledigt`;
 
     const box = document.getElementById('naechstes');
-    if (!naechster) {
+    if (gestern) {
+      const fehlend = gesamt - erledigt;
+      box.className = 'naechstes ' + (fehlend ? 'spaet' : 'fertig');
+      box.innerHTML = `<div class="klein">Rückblick</div><div class="gross">${fehlend
+        ? `${fehlend} Tropfen nicht abgehakt` : '✓ Alles getropft'}</div>`;
+    } else if (!naechster) {
       box.className = 'naechstes fertig';
       box.innerHTML = `<div class="klein">Heute</div><div class="gross">✓ Alles getropft</div>`;
     } else {
@@ -231,9 +269,19 @@
     render();
   });
 
+  document.getElementById('tabs').addEventListener('click', e => {
+    const knopf = e.target.closest('button[data-ansicht]');
+    if (!knopf) return;
+    ansicht = knopf.dataset.ansicht;
+    render();
+  });
+
   render();
   setInterval(render, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  // Beim Zurückkehren in die App immer auf "Heute", damit man nicht versehentlich auf Gestern schaut
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { ansicht = 'heute'; render(); }
+  });
 
   // Bittet Android, die gespeicherten Häkchen nicht bei Speicherplatzmangel zu löschen
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
