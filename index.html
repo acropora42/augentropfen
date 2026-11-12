@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E7C86">
+<title>Augentropfen</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #F2F5F6;
+    --karte: #FFFFFF;
+    --text: #1F2A30;
+    --grau: #66757D;
+    --linie: #DDE3E6;
+    --akzent: #0E7C86;
+    --dex: #3B6FD8;
+    --yel: #C98A00;
+    --fertig: #2E9E5B;
+    --faellig: #E07A1F;
+    --spaet: #D64545;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 16px 16px 40px; }
+
+  header h1 { margin: 4px 0 2px; font-size: 22px; }
+  header .datum { color: var(--grau); font-size: 15px; }
+
+  .fortschritt { margin: 14px 0 6px; height: 10px; background: var(--linie); border-radius: 5px; overflow: hidden; }
+  .fortschritt div { height: 100%; background: var(--fertig); transition: width .3s; }
+  .zaehler { font-size: 14px; color: var(--grau); }
+
+  .naechstes {
+    margin: 14px 0 18px; padding: 14px 16px; border-radius: 14px;
+    background: var(--akzent); color: #fff;
+  }
+  .naechstes.spaet { background: var(--spaet); }
+  .naechstes.fertig { background: var(--fertig); }
+  .naechstes .klein { font-size: 13px; opacity: .85; }
+  .naechstes .gross { font-size: 19px; font-weight: 600; margin-top: 2px; }
+
+  .legende { display: flex; gap: 8px; margin-bottom: 14px; font-size: 13px; color: var(--grau); }
+  .legende div { flex: 1; background: var(--karte); border-radius: 10px; padding: 8px 10px; border: 1px solid var(--linie); }
+  .legende b { color: var(--text); }
+
+  .slot {
+    background: var(--karte); border-radius: 16px; padding: 14px 14px 12px; margin-bottom: 12px;
+    border: 2px solid transparent;
+  }
+  .slot.faellig { border-color: var(--faellig); }
+  .slot.spaet { border-color: var(--spaet); }
+  .slot.fertig { opacity: .7; }
+  .slot-kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .slot-kopf .zeit { font-size: 22px; font-weight: 700; }
+  .status { font-size: 13px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--bg); color: var(--grau); }
+  .slot.faellig .status { background: #FCEBDC; color: #A4520C; }
+  .slot.spaet .status { background: #FBE3E3; color: #A42A2A; }
+  .slot.fertig .status { background: #DDF3E5; color: #1D6E3E; }
+
+  .zeile { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .mittel { grid-column: 1 / -1; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 7px; }
+  .mittel::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--farbe); }
+  .zeile.dex { --farbe: var(--dex); }
+  .zeile.yel { --farbe: var(--yel); }
+
+  button.tropfen {
+    font: inherit; border: 2px solid var(--linie); background: #fff; color: var(--text);
+    border-radius: 12px; min-height: 58px; padding: 6px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  button.tropfen .auge { font-weight: 600; }
+  button.tropfen .info { font-size: 12px; color: var(--grau); }
+  button.tropfen:active { transform: scale(.97); }
+  button.tropfen.erledigt { background: var(--fertig); border-color: var(--fertig); color: #fff; }
+  button.tropfen.erledigt .info { color: #fff; opacity: .9; }
+  button.tropfen:disabled { background: var(--bg); color: var(--grau); border-style: dashed; cursor: default; }
+
+  footer { margin-top: 18px; font-size: 12px; color: var(--grau); text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Augentropfen</h1>
+    <div class="datum" id="datum"></div>
+  </header>
+
+  <div class="fortschritt"><div id="balken" style="width:0"></div></div>
+  <div class="zaehler" id="zaehler"></div>
+
+  <div class="naechstes" id="naechstes"></div>
+
+  <div class="legende">
+    <div><b>Links</b><br>alte Fläschchen</div>
+    <div><b>Rechts</b><br>neue Fläschchen</div>
+  </div>
+
+  <div id="slots"></div>
+
+  <footer>Antippen = getropft · nochmal antippen = rückgängig</footer>
+</main>
+
+<script>
+  const SLOTS = [
+    { zeit: '08:00', mittel: ['dex', 'yel'] },
+    { zeit: '12:00', mittel: ['dex'] },
+    { zeit: '16:00', mittel: ['dex'] },
+    { zeit: '20:00', mittel: ['dex', 'yel'] },
+  ];
+  const MITTEL = { dex: 'Dexagenta', yel: 'Yellox' };
+  const AUGEN = [{ id: 'L', name: 'Links' }, { id: 'R', name: 'Rechts' }];
+  // Rechtes Auge wurde am 12.11. operiert, die neuen Tropfen starten am Folgetag
+  const RECHTS_AB = '2026-11-13';
+  // Ab so vielen Minuten nach der Tropf-Zeit wird ein offener Termin rot
+  const SPAET_NACH_MIN = 60;
+
+  const zwei = n => String(n).padStart(2, '0');
+  const tagKey = d => `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}`;
+  const minuten = zeit => { const [h, m] = zeit.split(':').map(Number); return h * 60 + m; };
+  const aktiv = (auge, tag) => auge !== 'R' || tag >= RECHTS_AB;
+
+  // Speicher im Browser; falls localStorage nicht geht, bleibt zumindest der Stand bis zum Schließen erhalten
+  const imSpeicher = {};
+  function laden(tag) {
+    try {
+      const roh = localStorage.getItem('tropfen:' + tag);
+      if (roh) return JSON.parse(roh);
+    } catch {}
+    return imSpeicher[tag] || {};
+  }
+  function speichern(tag, daten) {
+    imSpeicher[tag] = daten;
+    try { localStorage.setItem('tropfen:' + tag, JSON.stringify(daten)); } catch {}
+  }
+
+  function dauerText(min) {
+    if (min < 60) return `${min} Min`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h} Std ${m} Min` : `${h} Std`;
+  }
+
+  function render() {
+    const jetzt = new Date();
+    const tag = tagKey(jetzt);
+    const daten = laden(tag);
+    const minJetzt = jetzt.getHours() * 60 + jetzt.getMinutes();
+
+    document.getElementById('datum').textContent =
+      'Heute, ' + jetzt.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    let gesamt = 0, erledigt = 0, naechster = null;
+
+    const html = SLOTS.map(slot => {
+      const minSlot = minuten(slot.zeit);
+      let offen = 0;
+
+      const zeilen = slot.mittel.map(mi => {
+        const knoepfe = AUGEN.map(a => {
+          const id = `${slot.zeit}|${mi}|${a.id}`;
+          if (!aktiv(a.id, tag)) {
+            return `<button class="tropfen" disabled><span class="auge">${a.name}</span><span class="info">ab morgen</span></button>`;
+          }
+          gesamt++;
+          const um = daten[id];
+          if (um) {
+            erledigt++;
+            return `<button class="tropfen erledigt" data-id="${id}"><span class="auge">✓ ${a.name}</span><span class="info">um ${um}</span></button>`;
+          }
+          offen++;
+          return `<button class="tropfen" data-id="${id}"><span class="auge">${a.name}</span><span class="info">offen</span></button>`;
+        }).join('');
+        return `<div class="zeile ${mi}"><div class="mittel">${MITTEL[mi]}</div>${knoepfe}</div>`;
+      }).join('');
+
+      let klasse, status;
+      if (offen === 0) { klasse = 'fertig'; status = 'erledigt'; }
+      else if (minJetzt < minSlot) { klasse = ''; status = 'in ' + dauerText(minSlot - minJetzt); }
+      else if (minJetzt - minSlot > SPAET_NACH_MIN) { klasse = 'spaet'; status = 'überfällig'; }
+      else { klasse = 'faellig'; status = 'jetzt fällig'; }
+
+      if (offen > 0 && !naechster) naechster = { slot, klasse, minSlot };
+
+      return `<section class="slot ${klasse}">
+        <div class="slot-kopf"><span class="zeit">${slot.zeit} Uhr</span><span class="status">${status}</span></div>
+        ${zeilen}
+      </section>`;
+    }).join('');
+
+    document.getElementById('slots').innerHTML = html;
+    document.getElementById('balken').style.width = (gesamt ? erledigt / gesamt * 100 : 0) + '%';
+    document.getElementById('zaehler').textContent = `${erledigt} von ${gesamt} Tropfen erledigt`;
+
+    const box = document.getElementById('naechstes');
+    if (!naechster) {
+      box.className = 'naechstes fertig';
+      box.innerHTML = `<div class="klein">Heute</div><div class="gross">✓ Alles getropft</div>`;
+    } else {
+      const { slot, klasse, minSlot } = naechster;
+      const welche = slot.mittel.map(mi => MITTEL[mi]).join(' + ');
+      const wann = minJetzt < minSlot ? 'in ' + dauerText(minSlot - minJetzt)
+        : minJetzt === minSlot ? 'jetzt' : 'seit ' + dauerText(minJetzt - minSlot) + ' fällig';
+      box.className = 'naechstes' + (klasse === 'spaet' ? ' spaet' : '');
+      box.innerHTML = `<div class="klein">Als Nächstes · ${wann}</div><div class="gross">${slot.zeit} Uhr · ${welche}</div>`;
+    }
+  }
+
+  document.getElementById('slots').addEventListener('click', e => {
+    const knopf = e.target.closest('button[data-id]');
+    if (!knopf) return;
+    const tag = tagKey(new Date());
+    const daten = laden(tag);
+    const id = knopf.dataset.id;
+    if (daten[id]) {
+      const [zeit, mi, auge] = id.split('|');
+      const augeName = auge === 'L' ? 'links' : 'rechts';
+      if (!confirm(`Häkchen entfernen?\n${MITTEL[mi]} ${augeName}, ${zeit} Uhr`)) return;
+      delete daten[id];
+    } else {
+      const jetzt = new Date();
+      daten[id] = `${zwei(jetzt.getHours())}:${zwei(jetzt.getMinutes())}`;
+      if (navigator.vibrate) navigator.vibrate(30);
+    }
+    speichern(tag, daten);
+    render();
+  });
+
+  render();
+  setInterval(render, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+  // Bittet Android, die gespeicherten Häkchen nicht bei Speicherplatzmangel zu löschen
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
